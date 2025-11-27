@@ -1,16 +1,6 @@
 #ifndef DIFFTOR_H
 #define DIFFTOR_H
 
-const int MAX_VARS = 100;
-const int STR_MAX_LEN = 1000;
-const double LOW_NUMBER = 1e-5;
-
-struct var_t
-{
-    char* name;
-    double value;
-};
-
 #define ADD_(left_son, right_son) \
     create_operator_node("+", left_son, right_son)
 
@@ -26,24 +16,23 @@ struct var_t
 #define POW_(left_son, right_son) \
     create_operator_node("^", left_son, right_son)
 
-node_t* read_file(const char* filename);
+node_t* read_file       (const char* filename, var_t** variables, int* var_count);
 long int check_file_size(FILE* file);
-void skip_spaces(char** curr_pos);
+void skip_spaces        (char** curr_pos);
+bool is_variable_unique (read_info* read_data, const char* var_name);
+node_t* set_word_node   (read_info* read_data, const char* word);
 
-node_t* get_g  (char** cur_pos);
-node_t* get_n  (char** cur_pos);
-node_t* get_e  (char** cur_pos);
-node_t* get_t  (char** cur_pos);
-node_t* get_p  (char** cur_pos);
-node_t* get_w  (char** cur_pos);
-node_t* get_pow(char** cur_pos);
+node_t* get_g  (read_info* read_data);
+node_t* get_n  (read_info* read_data);
+node_t* get_e  (read_info* read_data);
+node_t* get_t  (read_info* read_data);
+node_t* get_p  (read_info* read_data);
+node_t* get_w  (read_info* read_data);
+node_t* get_pow(read_info* read_data);
 
-node_t* set_word_node(char** cur_pos, const char* word);
-
-// char* read_name(char** curr_pos);
-// enum node_type get_type(const char* data);
 
 double tree_sum(node_t* node, var_t** variables, int var_count, bool need_var_value = false);
+
 void request_variable_values(var_t** variables, int var_count);
 var_t* var_ctor(char* name, double value);
 double get_variable_value(const char* var_name, var_t** variables, int var_count);

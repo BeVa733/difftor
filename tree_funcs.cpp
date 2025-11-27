@@ -11,70 +11,6 @@
 extern node_t* HEAD;
 extern FILE* DUMP_FILE;
 
-
-double tree_sum(node_t* node, var_t** variables, int var_count, bool need_var_value)
-{
-    if (node == NULL)
-        return NAN;
-
-    if (var_count > 0 && isnan(variables[0]->value) && need_var_value)
-        request_variable_values(variables, var_count);
-
-
-    if (node->type == NUMBER)
-        return node->data.number;
-
-
-
-    if (node->type == VARIABLE)
-    {
-        if (need_var_value)
-            return get_variable_value(node->data.variable, variables, var_count);
-        else
-            return NAN;
-    }
-
-    if (node->type == OPERATOR)
-    {
-        switch(node->data.oper)
-        {
-            case ADD:
-                return tree_sum(node->left, variables, var_count) + tree_sum(node->right, variables, var_count);
-            case SUB:
-                return tree_sum(node->left, variables, var_count) - tree_sum(node->right, variables, var_count);
-            case MUL:
-                return tree_sum(node->left, variables, var_count) * tree_sum(node->right, variables, var_count);
-            case DIV:
-                {
-                    double right_val = tree_sum(node->right, variables, var_count);
-                    if (right_val == 0)
-                        return NAN;
-
-                    return tree_sum(node->left, variables, var_count) / right_val;
-                }
-            case POW:
-                return pow(tree_sum(node->left, variables, var_count), tree_sum(node->right, variables, var_count));
-            // case SIN:
-            //     return sin(tree_sum(node->right, variables, var_count));
-            // case COS:
-            //     return cos(tree_sum(node->right, variables, var_count));
-            // case LN:
-            //     {
-            //         double arg = tree_sum(node->right, variables, var_count);
-            //         if (arg <= 0)
-            //             return NAN;
-            //         return log(arg);
-            //     }
-            // case EXP:
-            //     return exp(tree_sum(node->right, variables, var_count));
-            default:
-                return NAN;
-        }
-    }
-
-    return NAN;
-}
-
 node_t* tree_copy(node_t* node)
 {
     if (node == NULL)
@@ -155,92 +91,119 @@ node_t* create_operator_node(const char* oper, node_t* left, node_t* right)
 node_t* tree_diff(node_t* node, const char* var)
 {
     assert(node);
-
-    if (node->type == NUMBER)
-        return create_number_node(0);
-
-    else if (node->type == VARIABLE)
+    switch (node->type)
     {
-        if (strcmp(var, node->data.variable) == 0)
-            return create_number_node(1);
-        else
+        case NUMBER:
             return create_number_node(0);
-    }
 
-    else if (node->type == OPERATOR)
-    {
-        switch(node->data.oper)
-        {
-            case MUL:
-                return ADD_(MUL_(d(L, var), c(R)), MUL_(d(R, var), c(L)));
+        case VARIABLE:
+            if (strcmp(var, node->data.variable) == 0)
+                return create_number_node(1);
 
-            case ADD:
-                return ADD_(d(L, var), d(R, var));
-
-            case SUB:
-                return SUB_(d(L, var), d(R, var));
-
-            case DIV:
-                return DIV_(SUB_(MUL_(d(L, var), c(R)), MUL_(c(L), d(R, var))), MUL_(c(R), c(R)));
-
-            case POW:
-                {
-                    if (!is_variable_in_tree(node->right, var))
-                    {
-                        node_t* node1 = create_number_node(1);
-                        return MUL_(MUL_(c(R), POW_(c(L), SUB_(c(R), node1))), d(L, var));
-                    }
-
-                    else if (!is_variable_in_tree(node->left, var))
-                    {
-                        node_t* ln_node = create_operator_node("ln", NULL, c(L));
-                        return MUL_(MUL_(POW_(c(L), c(R)), ln_node), d(R, var));
-                    }
-
-                    else
-                    {
-                        node_t* ln_node = create_operator_node("ln", NULL, c(L));
-                        return MUL_(POW_(c(L), c(R)), ADD_(MUL_(d(R, var), ln_node), MUL_(c(R), DIV_(d(L, var), c(L)))));
-                    }
-                }
-
-            case SIN:
-                {
-                    node_t* cos_node = create_operator_node("cos", NULL, c(R));
-                    return MUL_(cos_node, d(R, var));
-                }
-
-            case COS:
-                {
-                    node_t* sin_node = create_operator_node("sin", NULL, c(R));
-                    node_t* neg_sin = MUL_(create_number_node(-1), sin_node);
-                    return MUL_(neg_sin, d(R, var));
-                }
-
-            case LN:
-                {
-                    node_t* ln_node = DIV_(create_number_node(1), c(R));
-                    return MUL_(ln_node, d(R, var));
-                }
-
-            case EXP:
-                {
-                    node_t* exp_node = create_operator_node("exp", NULL, c(R));
-                    return MUL_(exp_node, d(R, var));
-                }
-
-            default:
+            else
                 return create_number_node(0);
-        }
+
+        case OPERATOR:
+            if (node->data.oper >= 0 && node->data.oper < N_FUNCS)
+                return funcs[node->data.oper].diff_func(node, var);
+
+            else
+                return create_number_node(0);
     }
 
     return create_number_node(0);
 }
 
-// #undef ADD_
-// #undef SUB_
-// #undef MUL_
-// #undef DIV_
+node_t* diff_add(node_t* node, const char* var)
+{
+    return ADD_(d(L, var), d(R, var));
+}
+
+node_t* diff_sub(node_t* node, const char* var)
+{
+    return SUB_(d(L, var), d(R, var));
+}
+
+node_t* diff_mul(node_t* node, const char* var)
+{
+    return ADD_(MUL_(d(L, var), c(R)), MUL_(d(R, var), c(L)));
+}
+
+node_t* diff_div(node_t* node, const char* var)
+{
+    return DIV_(SUB_(MUL_(d(L, var), c(R)), MUL_(c(L), d(R, var))), MUL_(c(R), c(R)));
+}
+
+node_t* diff_pow(node_t* node, const char* var)
+{
+    if (!is_variable_in_tree(node->right, var) && is_variable_in_tree(node->left, var))
+    {
+        node_t* node1 = create_number_node(1);
+        return MUL_(MUL_(c(R), POW_(c(L), SUB_(c(R), node1))), d(L, var));
+    }
+    else if (!is_variable_in_tree(node->left, var) && is_variable_in_tree(node->right, var))
+    {
+        node_t* ln_node = create_operator_node("ln", NULL, c(L));
+        return MUL_(MUL_(POW_(c(L), c(R)), ln_node), d(R, var));
+    }
+    else if (is_variable_in_tree(node->left, var) && is_variable_in_tree(node->right, var))
+    {
+        node_t* ln_node = create_operator_node("ln", NULL, c(L));
+        return MUL_(POW_(c(L), c(R)), ADD_(MUL_(d(R, var), ln_node), MUL_(c(R), DIV_(d(L, var), c(L)))));
+    }
+    else
+        return create_number_node(0);
+}
+
+node_t* diff_sin(node_t* node, const char* var)
+{
+    if (is_variable_in_tree(node->right, var))
+    {
+        node_t* cos_node = create_operator_node("cos", NULL, c(R));
+        return MUL_(cos_node, d(R, var));
+    }
+
+    else
+        return create_number_node(0);
+}
+
+node_t* diff_cos(node_t* node, const char* var)
+{
+    if (is_variable_in_tree(node->right, var))
+    {
+        node_t* sin_node = create_operator_node("sin", NULL, c(R));
+        node_t* neg_sin = MUL_(create_number_node(-1), sin_node);
+        return MUL_(neg_sin, d(R, var));
+    }
+
+    else
+        return create_number_node(0);
+}
+
+node_t* diff_ln(node_t* node, const char* var)
+{
+    if (is_variable_in_tree(node->right, var))
+    {
+        node_t* ln_node = DIV_(create_number_node(1), c(R));
+        return MUL_(ln_node, d(R, var));
+    }
+
+    else
+        return create_number_node(0);
+}
+
+node_t* diff_exp(node_t* node, const char* var)
+{
+    if (is_variable_in_tree(node->right, var))
+    {
+        node_t* exp_node = create_operator_node("exp", NULL, c(R));
+        return MUL_(exp_node, d(R, var));
+    }
+
+    else
+        return create_number_node(0);
+}
+
 #undef c
 #undef d
 #undef L
@@ -359,79 +322,9 @@ bool delete_extra_nodes(node_t* node)
 {
     if (!node || node->type != OPERATOR) return false;
 
-    bool changed = false;
-
-    switch(node->data.oper)
+    if (node->data.oper >= 0 && node->data.oper < N_FUNCS)
     {
-        case MUL:
-            if ((node->left && node->left->type == NUMBER && fabs(node->left->data.number) < LOW_NUMBER) ||
-                (node->right && node->right->type == NUMBER && fabs(node->right->data.number) < LOW_NUMBER))
-            {
-                node_to_number(node, 0);
-                return true;
-            }
-            if (node->left && node->left->type == NUMBER && fabs(node->left->data.number - 1) < LOW_NUMBER)
-            {
-                replace_with_child(node, node->right);
-                return true;
-            }
-            if (node->right && node->right->type == NUMBER && fabs(node->right->data.number - 1) < LOW_NUMBER)
-            {
-                replace_with_child(node, node->left);
-                return true;
-            }
-            break;
-
-        case ADD:
-            if (node->left && node->left->type == NUMBER && fabs(node->left->data.number) < LOW_NUMBER)
-            {
-                replace_with_child(node, node->right);
-                return true;
-            }
-            if (node->right && node->right->type == NUMBER && fabs(node->right->data.number) < LOW_NUMBER)
-            {
-                replace_with_child(node, node->left);
-                return true;
-            }
-            break;
-
-        case SUB:
-            if (node->right && node->right->type == NUMBER && fabs(node->right->data.number) < LOW_NUMBER)
-            {
-                replace_with_child(node, node->left);
-                return true;
-            }
-            break;
-
-        case DIV:
-            if (node->right && node->right->type == NUMBER && fabs(node->right->data.number - 1) < LOW_NUMBER)
-            {
-                replace_with_child(node, node->left);
-                return true;
-            }
-            // 0 / что-то = 0
-            if (node->left && node->left->type == NUMBER && fabs(node->left->data.number) < LOW_NUMBER)
-            {
-                node_to_number(node, 0);
-                return true;
-            }
-            break;
-
-        case POW:
-            if (node->right && node->right->type == NUMBER && fabs(node->right->data.number) < LOW_NUMBER)
-            {
-                node_to_number(node, 1);
-                return true;
-            }
-            if (node->right && node->right->type == NUMBER && fabs(node->right->data.number - 1) < LOW_NUMBER)
-            {
-                replace_with_child(node, node->left);
-                return true;
-            }
-            break;
-
-        default:
-            break;
+        return funcs[node->data.oper].simplify_func(node);
     }
 
     return false;
@@ -506,4 +399,105 @@ void node_to_number(node_t* node, double value)
         tree_dtor(node->right);
         node->right = NULL;
     }
+}
+
+bool simplify_add(node_t* node)
+{
+    bool changed = false;
+    if (node->left && node->left->type == NUMBER && fabs(node->left->data.number) < LOW_NUMBER)
+    {
+        replace_with_child(node, node->right);
+        changed = true;
+    }
+    else if (node->right && node->right->type == NUMBER && fabs(node->right->data.number) < LOW_NUMBER)
+    {
+        replace_with_child(node, node->left);
+        changed = true;
+    }
+    return changed;
+}
+
+bool simplify_sub(node_t* node)
+{
+    bool changed = false;
+    if (node->right && node->right->type == NUMBER && fabs(node->right->data.number) < LOW_NUMBER)
+    {
+        replace_with_child(node, node->left);
+        changed = true;
+    }
+    return changed;
+}
+
+bool simplify_mul(node_t* node)
+{
+    bool changed = false;
+    if ((node->left && node->left->type == NUMBER && fabs(node->left->data.number) < LOW_NUMBER) ||
+        (node->right && node->right->type == NUMBER && fabs(node->right->data.number) < LOW_NUMBER))
+    {
+        node_to_number(node, 0);
+        changed = true;
+    }
+    else if (node->left && node->left->type == NUMBER && fabs(node->left->data.number - 1) < LOW_NUMBER)
+    {
+        replace_with_child(node, node->right);
+        changed = true;
+    }
+    else if (node->right && node->right->type == NUMBER && fabs(node->right->data.number - 1) < LOW_NUMBER)
+    {
+        replace_with_child(node, node->left);
+        changed = true;
+    }
+    return changed;
+}
+
+bool simplify_div(node_t* node)
+{
+    bool changed = false;
+    if (node->right && node->right->type == NUMBER && fabs(node->right->data.number - 1) < LOW_NUMBER)
+    {
+        replace_with_child(node, node->left);
+        changed = true;
+    }
+    else if (node->left && node->left->type == NUMBER && fabs(node->left->data.number) < LOW_NUMBER)
+    {
+        node_to_number(node, 0);
+        changed = true;
+    }
+    return changed;
+}
+
+bool simplify_pow(node_t* node)
+{
+    bool changed = false;
+    if (node->right && node->right->type == NUMBER && fabs(node->right->data.number) < LOW_NUMBER)
+    {
+        node_to_number(node, 1);
+        changed = true;
+    }
+    else if (node->right && node->right->type == NUMBER && fabs(node->right->data.number - 1) < LOW_NUMBER)
+    {
+        replace_with_child(node, node->left);
+        changed = true;
+    }
+    return changed;
+}
+
+bool simplify_sin(node_t* node)
+{
+    return false;
+}
+
+bool simplify_cos(node_t* node)
+{
+    return false;
+}
+
+bool simplify_ln(node_t* node)
+{
+    return false;
+}
+
+bool simplify_exp(node_t* node)
+{
+    return false;
 }

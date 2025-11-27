@@ -36,15 +36,12 @@ node_t* node_ctor(enum node_type type, const char* data)
 
 enum funcs get_func(const char* data)
 {
-    if (!strcmp(data, "cos")) return COS;
-    if (!strcmp(data, "sin")) return SIN;
-    if (!strcmp(data, "ln"))  return LN;
-    if (!strcmp(data, "exp")) return EXP;
-    if (!strcmp(data, "-"))   return SUB;
-    if (!strcmp(data, "*"))   return MUL;
-    if (!strcmp(data, "/"))   return DIV;
-    if (!strcmp(data, "^"))   return POW;
-    if (!strcmp(data, "+"))   return ADD;
+    for (int i = 0; i < N_FUNCS; i++)
+    {
+        if (strcmp(data, funcs[i].str_name) == 0)
+            return funcs[i].enum_name;
+    }
+
     return INC_FUNC;
 }
 

@@ -25,19 +25,7 @@ void tree_dot(FILE* dot_file, node_t* node)
             break;
         case OPERATOR:
             strcpy(type, "operator");
-            switch (node->data.oper)
-            {
-                case ADD: strcpy(label, "+");  break;
-                case SUB: strcpy(label, "-");  break;
-                case MUL: strcpy(label, "*");  break;
-                case DIV: strcpy(label, "/");  break;
-                case POW: strcpy(label, "^");  break;
-                case SIN: strcpy(label, "sin"); break;
-                case COS: strcpy(label, "cos"); break;
-                case LN:  strcpy(label, "ln");  break;
-                case EXP: strcpy(label, "exp"); break;
-                default: strcpy(label, "?");
-            }
+            strcpy(label, funcs[node->data.oper].str_name);
             break;
         case VARIABLE:
             strcpy(type, "variable");
@@ -124,8 +112,8 @@ void tex_dump_compile(FILE* tex_file, const char* filename_prefix)
     sprintf(command, "pdflatex -interaction=nonstopmode -jobname=%s %s.tex > NUL 2>&1",
             filename_prefix, filename_prefix);
 
-    if (!system(command))
-        printf("Error: pdf not created\n");
+    if (system(command))
+        ;
 
     char aux_files[STR_MAX_LEN] = "";
     sprintf(aux_files, "rm %s.aux %s.log > NUL 2>&1",
@@ -142,9 +130,14 @@ void tex_dump_append_tree(node_t* node, FILE* tex_file)
     if (!node)
         return;
 
-    fprintf(tex_file, "$$\n");
+    fprintf(tex_file, "\\begingroup\n");
+    fprintf(tex_file, "\\allowdisplaybreaks\n");
+    fprintf(tex_file, "\\medmuskip=0mu\n");
+    fprintf(tex_file, "\\thinmuskip=0mu\n");
+    fprintf(tex_file, "\\begin{align*}\n");
     tree_tex(tex_file, node);
-    fprintf(tex_file, "\n$$\n");
+    fprintf(tex_file, "\n\\end{align*}\n");
+    fprintf(tex_file, "\\endgroup\n");
 
     fflush(tex_file);
 }
@@ -164,116 +157,119 @@ void tree_tex(FILE* tex_file, node_t* node)
             break;
 
         case OPERATOR:
-            switch (node->data.oper)
-            {
-                case ADD:
-                    tree_tex(tex_file, node->left);
-                    fprintf(tex_file, " + ");
-                    tree_tex(tex_file, node->right);
-                    break;
-
-                case SUB:
-                    tree_tex(tex_file, node->left);
-                    fprintf(tex_file, " - ");
-                    tree_tex(tex_file, node->right);
-                    break;
-
-                case MUL:
-                    if (node->left->type == OPERATOR && (node->left->data.oper == ADD || node->left->data.oper == SUB))
-                    {
-                        fprintf(tex_file, "\\left(");
-                        tree_tex(tex_file, node->left);
-                        fprintf(tex_file, "\\right)");
-                    }
-                    else
-                        tree_tex(tex_file, node->left);
-
-                    fprintf(tex_file, " \\cdot ");
-
-                    if (node->right->type == OPERATOR && (node->right->data.oper == ADD || node->right->data.oper == SUB))
-                    {
-                        fprintf(tex_file, "\\left(");
-                        tree_tex(tex_file, node->right);
-                        fprintf(tex_file, "\\right)");
-                    }
-                    else
-                        tree_tex(tex_file, node->right);
-
-                    break;
-
-                case DIV:
-                    fprintf(tex_file, "\\frac{");
-
-                    tree_tex(tex_file, node->left);
-
-                    fprintf(tex_file, "}{");
-
-                    tree_tex(tex_file, node->right);
-
-                    fprintf(tex_file, "}");
-                    break;
-
-                case POW:
-                    if (node->left->type == OPERATOR &&
-                       (node->left->data.oper == ADD || node->left->data.oper == SUB ||
-                        node->left->data.oper == MUL || node->left->data.oper == DIV))
-                    {
-                        fprintf(tex_file, "\\left(");
-                        tree_tex(tex_file, node->left);
-                        fprintf(tex_file, "\\right)");
-                    }
-                    else
-                        tree_tex(tex_file, node->left);
-
-                    fprintf(tex_file, "^{");
-                    tree_tex(tex_file, node->right);
-                    fprintf(tex_file, "}");
-                    break;
-
-                case SIN:
-                    fprintf(tex_file, "\\sin\\left(");
-                    tree_tex(tex_file, node->right);
-                    fprintf(tex_file, "\\right)");
-                    break;
-
-                case COS:
-                    fprintf(tex_file, "\\cos\\left(");
-                    tree_tex(tex_file, node->right);
-                    fprintf(tex_file, "\\right)");
-                    break;
-
-                case LN:
-                    fprintf(tex_file, "\\ln\\left(");
-                    tree_tex(tex_file, node->right);
-                    fprintf(tex_file, "\\right)");
-                    break;
-
-                case EXP:
-                    fprintf(tex_file, "e^{");
-                    tree_tex(tex_file, node->right);
-                    fprintf(tex_file, "}");
-                    break;
-
-                default:
-                    fprintf(tex_file, "?");
-                    break;
-            }
+            funcs[node->data.oper].tex_func(tex_file, node);
             break;
     }
 }
+
+void print_add_latex(FILE* tex_file, node_t* node)
+{
+    tree_tex(tex_file, node->left);
+    fprintf(tex_file, " + ");
+    tree_tex(tex_file, node->right);
+}
+
+void print_sub_latex(FILE* tex_file, node_t* node)
+{
+    tree_tex(tex_file, node->left);
+    fprintf(tex_file, " - ");
+    tree_tex(tex_file, node->right);
+}
+
+void print_mul_latex(FILE* tex_file, node_t* node)
+{
+    if (node->left->type == OPERATOR && (node->left->data.oper == ADD || node->left->data.oper == SUB))
+    {
+        fprintf(tex_file, "\\left(");
+        tree_tex(tex_file, node->left);
+        fprintf(tex_file, "\\right)");
+    }
+    else
+        tree_tex(tex_file, node->left);
+
+    fprintf(tex_file, " \\cdot ");
+
+    if (node->right->type == OPERATOR && (node->right->data.oper == ADD || node->right->data.oper == SUB))
+    {
+        fprintf(tex_file, "\\left(");
+        tree_tex(tex_file, node->right);
+        fprintf(tex_file, "\\right)");
+    }
+    else
+        tree_tex(tex_file, node->right);
+}
+
+void print_div_latex(FILE* tex_file, node_t* node)
+{
+    fprintf(tex_file, "\\frac{");
+
+    tree_tex(tex_file, node->left);
+
+    fprintf(tex_file, "}{");
+
+    tree_tex(tex_file, node->right);
+
+    fprintf(tex_file, "}");
+}
+
+void print_pow_latex(FILE* tex_file, node_t* node)
+{
+    if (node->left->type == OPERATOR &&
+       (node->left->data.oper == ADD || node->left->data.oper == SUB ||
+        node->left->data.oper == MUL || node->left->data.oper == DIV))
+    {
+        fprintf(tex_file, "\\left(");
+        tree_tex(tex_file, node->left);
+        fprintf(tex_file, "\\right)");
+    }
+    else
+        tree_tex(tex_file, node->left);
+
+    fprintf(tex_file, "^{");
+    tree_tex(tex_file, node->right);
+    fprintf(tex_file, "}");
+}
+
+void print_sin_latex(FILE* tex_file, node_t* node)
+{
+    fprintf(tex_file, "\\sin\\left(");
+    tree_tex(tex_file, node->right);
+    fprintf(tex_file, "\\right)");
+}
+
+void print_cos_latex(FILE* tex_file, node_t* node)
+{
+    fprintf(tex_file, "\\cos\\left(");
+    tree_tex(tex_file, node->right);
+    fprintf(tex_file, "\\right)");
+}
+
+void print_ln_latex(FILE* tex_file, node_t* node)
+{
+    fprintf(tex_file, "\\ln\\left(");
+    tree_tex(tex_file, node->right);
+    fprintf(tex_file, "\\right)");
+}
+
+void print_exp_latex(FILE* tex_file, node_t* node)
+{
+    fprintf(tex_file, "e^{");
+    tree_tex(tex_file, node->right);
+    fprintf(tex_file, "}");
+}
+
 
 void make_tex_preamble(FILE* tex_file)
 {
     fprintf(tex_file, "\\documentclass[a4paper,12pt]{article}\n");
     fprintf(tex_file, "\\usepackage{geometry}\n");
-    fprintf(tex_file, "\\geometry{top=2cm, bottom=3cm, left=3cm, right=3cm}\n");
+    fprintf(tex_file, "\\geometry{top=1cm, bottom=1cm, left=1cm, right=1cm}\n");
     fprintf(tex_file, "\\setlength{\\parindent}{0pt}\n");
 
     fprintf(tex_file, "\\usepackage{graphicx}\n");
-    fprintf(tex_file, "\\usepackage{wrapfig}\n");
-    fprintf(tex_file, "\\usepackage{caption}\n");
-    fprintf(tex_file, "\\usepackage{subcaption}\n");
-    fprintf(tex_file, "\\usepackage[english,russian]{babel}\n");
-    fprintf(tex_file, "\\usepackage{amsmath, float, amssymb, amsthm, mathtools}\n");
-    fprintf(tex_file, "\\usepackage{amsfonts}\n");
+    fprintf(tex_file, "\\usepackage{amsmath}\n");
+    fprintf(tex_file, "\\usepackage{mathtools}\n");
+
+    fprintf(tex_file, "\\allowdisplaybreaks\n");
+    fprintf(tex_file, "\\overfullrule=0pt\n");
 }
